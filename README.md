@@ -29,9 +29,11 @@ Copy `.env.example` to `.env.local` if needed. The Vite client uses `VITE_SUPABA
 
 Apply [docs/schema.sql](docs/schema.sql) in the Supabase SQL Editor to create the auth-linked account, team, schedule, availability, event type, booking, attendee, payment, and credential tables with RLS policies. The frontend cannot create these tables using a publishable key.
 
-If the base schema is already installed, run [docs/supabase-upgrade.sql](docs/supabase-upgrade.sql) in the Supabase SQL Editor. It syncs existing Auth users into `app_user`, promotes only the designated Auth UID when its email matches `Lanzuela63@gmail.com`, demotes all other profiles to `member`, and adds Admin UI event-type RLS access. The app checks the same UID and email before showing admin controls. Rerun this migration to enforce the single-admin rule on an existing database.
+If the base schema is already installed, run [docs/supabase-upgrade.sql](docs/supabase-upgrade.sql) in the Supabase SQL Editor. It syncs existing Auth users into `app_user`, promotes only the designated Auth UID when its email matches `Lanzuela63@gmail.com`, demotes all other profiles to `member`, and adds Admin event-type access plus owner-scoped schedule policies and availability upsert support. The app checks the same UID and email before showing admin controls. Rerun this migration to enforce the single-admin rule and workspace policies on an existing database.
 
 For profile photos, run [docs/supabase-profile-pictures.sql](docs/supabase-profile-pictures.sql) in the SQL Editor. It creates the `avatars` Storage bucket, owner-folder policies, `app_user.avatar_path`, and a restricted RPC for updating only the signed-in user's avatar path. Users can change their photo from the profile menu. Uploads accept JPG, PNG, or WebP up to 2 MB; image objects are publicly readable so the avatar can appear in the app.
+
+The **Settings** screen saves public name, booking slug, time zone, and booking-page visibility. **Availability** saves one weekly time interval per day. **Event types** supports creating, renaming, changing duration, and deleting the signed-in user's event types (or all event types for the designated admin under RLS).
 
 Locally, run `npm run dev` and open `http://127.0.0.1:5173/`. The sign-in screen is the app entry point. After signing in, choose **Admin** in the left panel to manage event types. Sign out from the profile menu or the **Sign out** row in the sidebar; signing out returns to the entry screen. The deployed Vercel app works the same way at its deployment URL.
 

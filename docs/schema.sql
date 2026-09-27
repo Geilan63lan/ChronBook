@@ -68,7 +68,8 @@ create table availability_rule (
   weekday smallint not null check (weekday between 0 and 6),
   start_time time not null,
   end_time time not null,
-  check (end_time > start_time)
+  check (end_time > start_time),
+  unique (schedule_id, weekday)
 );
 
 create table event_type (
@@ -127,6 +128,11 @@ alter table payment enable row level security;
 alter table credential enable row level security;
 alter table account_settings enable row level security;
 alter table availability_rule enable row level security;
+
+create policy "users can manage their own schedules"
+  on schedule for all
+  using (user_id = auth.uid())
+  with check (user_id = auth.uid());
 
 create policy "users can view their own account"
   on app_user for select

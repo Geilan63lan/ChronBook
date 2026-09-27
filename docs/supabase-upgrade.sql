@@ -45,7 +45,18 @@ set email = excluded.email,
     end;
 
 alter table public.app_user enable row level security;
+alter table public.schedule enable row level security;
+alter table public.availability_rule enable row level security;
 alter table public.event_type enable row level security;
+
+create unique index if not exists availability_rule_schedule_weekday_uidx
+  on public.availability_rule (schedule_id, weekday);
+
+drop policy if exists "users can manage their own schedules" on public.schedule;
+create policy "users can manage their own schedules"
+  on public.schedule for all
+  using (user_id = auth.uid())
+  with check (user_id = auth.uid());
 
 drop policy if exists "users can view their own account" on public.app_user;
 create policy "users can view their own account"

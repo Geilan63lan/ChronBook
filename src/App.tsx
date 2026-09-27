@@ -2,6 +2,10 @@ import { useEffect, useRef, useState, type ReactNode } from 'react'
 import { gsap } from 'gsap'
 import type { User } from '@supabase/supabase-js'
 import { isSupabaseConfigured, supabase } from './lib/supabase'
+import { SettingsView } from './views/SettingsView'
+import { AvailabilityView } from './views/AvailabilityView'
+import { EventTypesView } from './views/EventTypesView'
+import './views/workspace.css'
 import {
   ArrowUpRight,
   ArrowRight,
@@ -61,6 +65,10 @@ const initialEventTypes: EditableEvent[] = [
 function App() {
   const appRef = useRef<HTMLDivElement>(null)
   const [currentUser, setCurrentUser] = useState<User | null>(null)
+  const [isAdmin, setIsAdmin] = useState(false)
+  const [adminRoleLoaded, setAdminRoleLoaded] = useState(false)
+  const [adminSetupNeeded, setAdminSetupNeeded] = useState(false)
+  const [displayName, setDisplayName] = useState('')
   const [authLoading, setAuthLoading] = useState(true)
   const [activeView, setActiveView] = useState('Overview')
   const [sidebarCollapsed, setSidebarCollapsed] = useState(true)
@@ -93,6 +101,39 @@ function App() {
       const path = data?.avatar_path ?? null
       setAvatarPath(path)
       setAvatarUrl(path ? client.storage.from('avatars').getPublicUrl(path).data.publicUrl : null)
+    })
+  }, [currentUser])
+
+  useEffect(() => {
+    const client = supabase
+    if (!currentUser || !client) {
+      setIsAdmin(false)
+      setAdminRoleLoaded(Boolean(currentUser))
+      return
+    }
+    let isCurrent = true
+    setAdminRoleLoaded(false)
+    const isDesignatedAccount = currentUser.id === ADMIN_USER_ID && currentUser.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase()
+    client.rpc('is_admin').then(({ data, error }) => {
+      if (!isCurrent) return
+      setIsAdmin(isDesignatedAccount && !error && data === true)
+      const looksLikeAdminAccount = currentUser.id === ADMIN_USER_ID || currentUser.email?.toLowerCase() === ADMIN_EMAIL.toLowerCase()
+      setAdminSetupNeeded(looksLikeAdminAccount && (Boolean(error) || data !== true))
+      setAdminRoleLoaded(true)
+    })
+    return () => { isCurrent = false }
+  }, [currentUser])
+
+  useEffect(() => {
+    if (activeView === 'Admin' && adminRoleLoaded && !isAdmin) setActiveView('Overview')
+  }, [activeView, adminRoleLoaded, isAdmin])
+
+  useEffect(() => {
+    const client = supabase
+    if (!currentUser || !client) return
+    setDisplayName(currentUser.user_metadata?.display_name ?? currentUser.email?.split('@')[0] ?? '')
+    client.from('account_settings').select('display_name').eq('user_id', currentUser.id).maybeSingle().then(({ data }) => {
+      if (data?.display_name) setDisplayName(data.display_name)
     })
   }, [currentUser])
 
@@ -189,15 +230,15 @@ function App() {
       <aside className={`sidebar reveal ${sidebarCollapsed ? 'collapsed' : ''}`} onClick={() => setSidebarCollapsed((collapsed) => !collapsed)} onKeyDown={(event) => { if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); setSidebarCollapsed((collapsed) => !collapsed) } }} tabIndex={0} aria-label={sidebarCollapsed ? 'Expand sidebar' : 'Collapse sidebar'}>
         <div className="brand"><span className="brand-mark"><CalendarDays size={17} /></span><span className="brand-name">chronbook</span></div>
         <div className="profile-wrap">
-          <button className="workspace-switcher" onClick={(event) => { event.stopPropagation(); if (sidebarCollapsed) { setSidebarCollapsed(false); setProfileMenuOpen(true) } else setProfileMenuOpen((open) => !open) }} aria-expanded={profileMenuOpen} aria-haspopup="menu"><UserAvatar url={avatarUrl} fallback={currentUser.email?.slice(0, 1) ?? 'C'} /><span className="workspace-name">{currentUser.user_metadata?.display_name ?? currentUser.email}</span><ChevronDown size={15} /></button>
-          {profileMenuOpen && <div className="profile-menu" role="menu" onClick={(event) => event.stopPropagation()}><div className="profile-menu-heading"><strong>{currentUser.user_metadata?.display_name ?? 'ChronBook account'}</strong><span>{currentUser.email}</span></div><label className="profile-menu-action" role="menuitem"><Camera size={15} /><span>{avatarBusy ? 'Uploading picture…' : 'Change profile picture'}</span><input type="file" accept="image/jpeg,image/png,image/webp" onChange={uploadAvatar} disabled={avatarBusy} /></label>{avatarMessage && <p className="avatar-message" role="status">{avatarMessage}</p>}<button role="menuitem" onClick={() => { setActiveView('Settings'); setProfileMenuOpen(false) }}><Settings2 size={15} /> Account settings</button><button role="menuitem" onClick={() => { setActiveView('Admin'); setProfileMenuOpen(false) }}><ShieldCheck size={15} /> Admin workspace</button><button role="menuitem" onClick={async () => { await supabase?.auth.signOut(); setProfileMenuOpen(false) }}><LogOut size={15} /> Sign out</button></div>}
+          <button className="workspace-switcher" onClick={(event) => { event.stopPropagation(); if (sidebarCollapsed) { setSidebarCollapsed(false); setProfileMenuOpen(true) } else setProfileMenuOpen((open) => !open) }} aria-expanded={profileMenuOpen} aria-haspopup="menu"><UserAvatar url={avatarUrl} fallback={currentUser.email?.slice(0, 1) ?? 'C'} /><span className="workspace-name">{displayName || currentUser.email}</span><ChevronDown size={15} /></button>
+          {profileMenuOpen && <div className="profile-menu" role="menu" onClick={(event) => event.stopPropagation()}><div className="profile-menu-heading"><strong>{displayName || 'ChronBook account'}</strong><span>{currentUser.email}</span></div><label className="profile-menu-action" role="menuitem"><Camera size={15} /><span>{avatarBusy ? 'Uploading picture…' : 'Change profile picture'}</span><input type="file" accept="image/jpeg,image/png,image/webp" onChange={uploadAvatar} disabled={avatarBusy} /></label>{avatarMessage && <p className="avatar-message" role="status">{avatarMessage}</p>}<button role="menuitem" onClick={() => { setActiveView('Settings'); setProfileMenuOpen(false) }}><Settings2 size={15} /> Account settings</button>{isAdmin && <button role="menuitem" onClick={() => { setActiveView('Admin'); setProfileMenuOpen(false) }}><ShieldCheck size={15} /> Admin workspace</button>}<button role="menuitem" onClick={async () => { await supabase?.auth.signOut(); setProfileMenuOpen(false) }}><LogOut size={15} /> Sign out</button></div>}
         </div>
         <nav className="nav-list" aria-label="Primary navigation">
           <NavItem icon={<LayoutDashboard size={17} />} label="Overview" active={activeView === 'Overview'} onClick={() => setActiveView('Overview')} />
           <NavItem icon={<CalendarDays size={17} />} label="Bookings" active={activeView === 'Bookings'} onClick={() => setActiveView('Bookings')} badge="24" />
           <NavItem icon={<Clock3 size={17} />} label="Availability" active={activeView === 'Availability'} onClick={() => setActiveView('Availability')} />
           <NavItem icon={<Users size={17} />} label="Event types" active={activeView === 'Event types'} onClick={() => setActiveView('Event types')} />
-          <NavItem icon={<ShieldCheck size={17} />} label="Admin" active={activeView === 'Admin'} onClick={() => setActiveView('Admin')} />
+          {isAdmin && <NavItem icon={<ShieldCheck size={17} />} label="Admin" active={activeView === 'Admin'} onClick={() => setActiveView('Admin')} />}
         </nav>
         <div className="sidebar-bottom">
           <NavItem icon={<Settings2 size={17} />} label="Settings" active={activeView === 'Settings'} onClick={() => setActiveView('Settings')} />
@@ -227,7 +268,7 @@ function App() {
             <div className="schedule-panel panel"><div className="panel-heading"><div><p className="section-kicker">Your day at a glance</p><h2>Today’s schedule</h2><p>September 21 · Pacific Time</p></div><button className="text-button" onClick={() => setActiveView('Bookings')}>Open calendar <ArrowUpRight size={15} /></button></div><div className="filter-row">{(['All', 'Confirmed', 'Pending', 'Completed'] as const).map((filter) => <button key={filter} className={`filter-chip ${statusFilter === filter ? 'selected' : ''}`} onClick={() => setStatusFilter(filter)}>{filter}</button>)}</div><div className="timeline-wrap"><span className="timeline-line" /> <div className="booking-list">{visibleBookings.map((booking) => <BookingRow key={`${booking.time}-${booking.title}`} booking={booking} />)}</div></div></div>
             <aside className="right-column"><div className="share-panel panel"><div className="share-icon"><Link2 size={19} /></div><p className="eyebrow">Your booking page</p><h2>Let people book time with you.</h2><p className="muted">Share one link and let ChronBook handle the time zones, reminders, and details.</p><div className="share-link"><span>chronbook.me/alex</span><button onClick={copyLink} aria-label="Copy booking page link">{copied ? <Check size={16} /> : <Copy size={16} />}</button></div><button className="outline-button" onClick={copyLink}>{copied ? 'Copied to clipboard' : 'Copy booking link'} <ArrowUpRight size={15} /></button></div><div className="event-panel panel"><div className="panel-heading"><div><h2>Event types</h2><p>What people can book</p></div><button className="icon-button" aria-label="Add event type"><Plus size={17} /></button></div>{editableEvents.map((event) => <div className="event-row" key={event.name}><span className={`event-dot ${event.accent}`} /><div><strong>{event.name}</strong><span>{event.duration} · {event.bookings} bookings</span></div><ChevronDown size={15} className="event-chevron" /></div>)}</div></aside>
           </section>
-        </> : activeView === 'Admin' ? <AdminView events={editableEvents} setEvents={setEditableEvents} message={adminMessage} onSave={saveAdminEvents} /> : <section className="placeholder-view"><div className="placeholder-icon"><Sparkles size={24} /></div><p className="eyebrow">ChronBook workspace</p><h1>{activeView}</h1><p className="lede">This workspace is ready for the next booking workflow.</p><button className="primary-button" onClick={() => setShowModal(true)}><Plus size={17} /> Create booking</button></section>}
+        </> : activeView === 'Settings' ? <SettingsView user={currentUser} initialDisplayName={displayName} onDisplayNameChange={setDisplayName} adminSetupNeeded={adminSetupNeeded} /> : activeView === 'Availability' ? <AvailabilityView user={currentUser} /> : activeView === 'Event types' ? <EventTypesView user={currentUser} onEventsChange={setEditableEvents} /> : activeView === 'Admin' && isAdmin ? <AdminView events={editableEvents} setEvents={setEditableEvents} message={adminMessage} onSave={saveAdminEvents} /> : <section className="placeholder-view"><div className="placeholder-icon"><Sparkles size={24} /></div><p className="eyebrow">ChronBook workspace</p><h1>{activeView}</h1><p className="lede">This workspace is ready for the next booking workflow.</p><button className="primary-button" onClick={() => setShowModal(true)}><Plus size={17} /> Create booking</button></section>}
       </main>
 
       {showModal && <div className="modal-backdrop" role="presentation" onMouseDown={() => setShowModal(false)}><section className="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title" onMouseDown={(event) => event.stopPropagation()}><div className="modal-header"><div><p className="eyebrow">Quick action</p><h2 id="modal-title">Create a booking</h2></div><button className="icon-button" onClick={() => setShowModal(false)} aria-label="Close dialog"><X size={18} /></button></div><label>Event type<select defaultValue="Product strategy call"><option>Product strategy call</option><option>30 min discovery call</option><option>Onboarding session</option></select></label><label>Attendee email<input type="email" placeholder="name@company.com" /></label><div className="modal-actions"><button className="outline-button" onClick={() => setShowModal(false)}>Cancel</button><button className="primary-button" onClick={() => setShowModal(false)}><Check size={16} /> Save booking</button></div><p className="modal-footnote"><LockKeyhole size={13} /> Server-side validation and authorization will be required before persistence.</p></section></div>}
