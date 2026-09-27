@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { User } from '@supabase/supabase-js'
-import { Check, Clock3, Save } from 'lucide-react'
+import { Check, Clock3 } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 
 type DayRule = { weekday: number; enabled: boolean; start: string; end: string }

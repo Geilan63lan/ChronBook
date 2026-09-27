@@ -1,13 +1,13 @@
 import { useEffect, useState } from 'react'
 import type { User } from '@supabase/supabase-js'
-import { Check, ExternalLink, Save } from 'lucide-react'
+import { ExternalLink, Save } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 
 const timeZones = ['UTC', 'America/Los_Angeles', 'America/Denver', 'America/Chicago', 'America/New_York', 'Europe/London', 'Europe/Paris', 'Asia/Manila', 'Asia/Tokyo', 'Australia/Sydney']
 
-export function SettingsView({ user, initialDisplayName, onDisplayNameChange, adminSetupNeeded }: { user: User; initialDisplayName: string; onDisplayNameChange: (name: string) => void; adminSetupNeeded: boolean }) {
+export function SettingsView({ user, initialDisplayName, initialBookingSlug, onDisplayNameChange, onBookingSlugChange, adminSetupNeeded }: { user: User; initialDisplayName: string; initialBookingSlug: string; onDisplayNameChange: (name: string) => void; onBookingSlugChange: (slug: string) => void; adminSetupNeeded: boolean }) {
   const [displayName, setDisplayName] = useState(initialDisplayName)
-  const [bookingSlug, setBookingSlug] = useState(user.email?.split('@')[0]?.toLowerCase().replace(/[^a-z0-9-]/g, '-') ?? '')
+  const [bookingSlug, setBookingSlug] = useState(initialBookingSlug)
   const [timeZone, setTimeZone] = useState(() => {
     const browserTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone
     return timeZones.includes(browserTimeZone) ? browserTimeZone : 'UTC'
@@ -24,12 +24,13 @@ export function SettingsView({ user, initialDisplayName, onDisplayNameChange, ad
       if (data) {
         setDisplayName(data.display_name)
         setBookingSlug(data.booking_slug)
+        onBookingSlugChange(data.booking_slug)
         setTimeZone(data.default_time_zone)
         setBookingPageEnabled(data.booking_page_enabled)
       } else if (error) setMessage(error.message)
       setLoading(false)
     })
-  }, [user.id])
+  }, [user.id, onBookingSlugChange])
 
   const save = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -51,6 +52,7 @@ export function SettingsView({ user, initialDisplayName, onDisplayNameChange, ad
     if (!error) {
       setBookingSlug(normalizedSlug)
       onDisplayNameChange(displayName.trim())
+      onBookingSlugChange(normalizedSlug)
     }
   }
 

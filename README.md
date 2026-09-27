@@ -37,9 +37,9 @@ The **Settings** screen saves public name, booking slug, time zone, and booking-
 
 Locally, run `npm run dev` and open `http://127.0.0.1:5173/`. The sign-in screen is the app entry point. After signing in, choose **Admin** in the left panel to manage event types. Sign out from the profile menu or the **Sign out** row in the sidebar; signing out returns to the entry screen. The deployed Vercel app works the same way at its deployment URL.
 
-The profile chevron opens Account settings, Admin workspace, and Sign out actions. `VITE_ADMIN_EMAIL` is display configuration only; actual admin authorization comes from the `app_user.role` database value. Set the account password in Supabase Authentication, not in a Vite env variable; browser-exposed env values cannot protect passwords. The upgrade SQL promotes the existing Auth user by the UID already configured for this project.
+The profile chevron opens Account settings, Admin workspace (for the authorized admin only), and Sign out actions. Admin authorization comes from the Supabase `is_admin()` function and database role. Set account passwords in Supabase Authentication, not Vite environment variables; browser-exposed values cannot protect passwords.
 
-You do not need to fill every value in `.env.example`. It is a template. For this frontend, copy only the `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`, and optional `VITE_ADMIN_EMAIL` values into `.env.local`. Server-only variables such as `SUPABASE_SERVICE_ROLE_KEY`, `DATABASE_URL`, and `SESSION_SECRET` belong only in an API or Edge Function environment.
+You do not need to fill every value in `.env.example`. It is a template. For this frontend, copy only `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY` into `.env.local`. Server-only variables such as `SUPABASE_SERVICE_ROLE_KEY`, `DATABASE_URL`, and `SESSION_SECRET` belong only in an API or Edge Function environment.
 
 ## Project boundaries
 
