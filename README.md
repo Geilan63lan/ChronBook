@@ -46,3 +46,13 @@ You do not need to fill every value in `.env.example`. It is a template. For thi
 Bookings and dashboard metrics remain prototype data. Supabase authentication, Admin event types, and user profile photos use the configured Supabase project. Follow [SECURITY.md](SECURITY.md) before adding persistence for bookings or payments.
 
 The root repository README contains the full 18-point security checklist. This project keeps that checklist as a release gate, not as a promise that the prototype has already completed every item.
+
+## 📜 Licensing & Commercial Use
+
+ChronBook is **proprietary software** and is **not open source**. This repository is available for inspection; viewing or downloading it does not grant permission to use, modify, redistribute, resell, sublicense, or republish ChronBook or substantial portions of its original materials.
+
+Commercial use is permitted only under a separate written ChronBook license agreement. A licensed customer may deploy and modify their licensed copy for their own permitted use, but may not resell ChronBook itself as a software product or commercial template. Unless a written agreement says otherwise, the Developer retains ownership, the license is non-exclusive, and no copyright ownership is transferred.
+
+The Developer may display ChronBook in a professional portfolio, subject to confidentiality obligations and without disclosing private credentials, user data, or confidential information. Third-party components remain subject to their own licenses and terms.
+
+See [LICENSE.md](LICENSE.md) for the full terms. For commercial licensing, customization, support, maintenance, or other licensing inquiries, contact **Geilan63lan** or open an inquiry through the [ChronBook repository](https://github.com/Geilan63lan/ChronBook/).
