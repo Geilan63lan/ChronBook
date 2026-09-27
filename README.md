@@ -25,26 +25,22 @@ The current UI is a static frontend prototype, so it does not require environmen
 
 ## Supabase setup
 
-Copy `.env.example` to `.env.local` and set `VITE_SUPABASE_PUBLISHABLE_KEY` in the local app and Vercel project settings. The browser client uses only the publishable key. Never add the Supabase secret key to this Vite app. Enable RLS and add policies before allowing real users to write data.
+Copy `.env.example` to `.env.local` if needed. The Vite client uses `VITE_SUPABASE_URL` and `VITE_SUPABASE_PUBLISHABLE_KEY`; add those same two values to Vercel's project environment settings. The browser client uses only the publishable key. Never add the Supabase secret/service-role key or a Postgres connection string to this Vite app.
 
 Apply [docs/schema.sql](docs/schema.sql) in the Supabase SQL Editor to create the auth-linked account, team, schedule, availability, event type, booking, attendee, payment, and credential tables with RLS policies. The frontend cannot create these tables using a publishable key.
 
-To open the admin side locally, run `npm run dev`, open `http://127.0.0.1:5173/`, and select **Admin** in the left panel. Create an account or sign in there before saving event type changes. In the deployed Vercel app, use the same path at your deployment URL; this prototype uses the Admin navigation view rather than a separate `/admin` URL.
+If the base schema is already installed, run [docs/supabase-upgrade.sql](docs/supabase-upgrade.sql) in the Supabase SQL Editor. It syncs existing Auth users into `app_user`, promotes only the designated Auth UID when its email matches `Lanzuela63@gmail.com`, demotes all other profiles to `member`, and adds Admin UI event-type RLS access. The app checks the same UID and email before showing admin controls. Rerun this migration to enforce the single-admin rule on an existing database.
 
-The profile chevron opens Account settings, Admin workspace, and Sign out actions. `VITE_ADMIN_EMAIL` is display configuration only; actual admin authorization comes from the `app_user.role` database value. Set the account password in Supabase Authentication, not in a Vite env variable; browser-exposed env values cannot protect passwords.
+For profile photos, run [docs/supabase-profile-pictures.sql](docs/supabase-profile-pictures.sql) in the SQL Editor. It creates the `avatars` Storage bucket, owner-folder policies, `app_user.avatar_path`, and a restricted RPC for updating only the signed-in user's avatar path. Users can change their photo from the profile menu. Uploads accept JPG, PNG, or WebP up to 2 MB; image objects are publicly readable so the avatar can appear in the app.
 
-After creating the user in Supabase Authentication and running the schema, promote that account once from the Supabase SQL Editor:
+Locally, run `npm run dev` and open `http://127.0.0.1:5173/`. The sign-in screen is the app entry point. After signing in, choose **Admin** in the left panel to manage event types. Sign out from the profile menu or the **Sign out** row in the sidebar; signing out returns to the entry screen. The deployed Vercel app works the same way at its deployment URL.
 
-```sql
-update public.app_user
-set role = 'admin'
-where email = 'Lanzuela63lan@gmail.com';
-```
+The profile chevron opens Account settings, Admin workspace, and Sign out actions. `VITE_ADMIN_EMAIL` is display configuration only; actual admin authorization comes from the `app_user.role` database value. Set the account password in Supabase Authentication, not in a Vite env variable; browser-exposed env values cannot protect passwords. The upgrade SQL promotes the existing Auth user by the UID already configured for this project.
 
 You do not need to fill every value in `.env.example`. It is a template. For this frontend, copy only the `VITE_SUPABASE_URL`, `VITE_SUPABASE_PUBLISHABLE_KEY`, and optional `VITE_ADMIN_EMAIL` values into `.env.local`. Server-only variables such as `SUPABASE_SERVICE_ROLE_KEY`, `DATABASE_URL`, and `SESSION_SECRET` belong only in an API or Edge Function environment.
 
 ## Project boundaries
 
-The current booking dialog and dashboard data are local prototype state. No booking is persisted yet, and no authentication or authorization is implemented in the browser. Before connecting a database, follow [SECURITY.md](SECURITY.md) and review the planned entities in [docs/schema.sql](docs/schema.sql).
+Bookings and dashboard metrics remain prototype data. Supabase authentication, Admin event types, and user profile photos use the configured Supabase project. Follow [SECURITY.md](SECURITY.md) before adding persistence for bookings or payments.
 
 The root repository README contains the full 18-point security checklist. This project keeps that checklist as a release gate, not as a promise that the prototype has already completed every item.

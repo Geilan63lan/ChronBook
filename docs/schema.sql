@@ -7,6 +7,7 @@ create table app_user (
   email text not null unique,
   email_verified_at timestamptz,
   role text not null default 'member' check (role in ('member', 'admin')),
+  avatar_path text,
   created_at timestamptz not null default now()
 );
 
@@ -41,13 +42,13 @@ create table account_settings (
 );
 
 create table team (
-  id uuid primary key,
+  id uuid primary key default gen_random_uuid(),
   name text not null,
   slug text not null unique
 );
 
 create table membership (
-  id uuid primary key,
+  id uuid primary key default gen_random_uuid(),
   user_id uuid not null references app_user(id),
   team_id uuid not null references team(id),
   role text not null check (role in ('owner', 'admin', 'member')),
@@ -55,14 +56,14 @@ create table membership (
 );
 
 create table schedule (
-  id uuid primary key,
+  id uuid primary key default gen_random_uuid(),
   user_id uuid not null references app_user(id),
   name text not null,
   time_zone text not null
 );
 
 create table availability_rule (
-  id uuid primary key,
+  id uuid primary key default gen_random_uuid(),
   schedule_id uuid not null references schedule(id) on delete cascade,
   weekday smallint not null check (weekday between 0 and 6),
   start_time time not null,
@@ -71,7 +72,7 @@ create table availability_rule (
 );
 
 create table event_type (
-  id uuid primary key,
+  id uuid primary key default gen_random_uuid(),
   user_id uuid not null references app_user(id),
   team_id uuid references team(id),
   title text not null,
@@ -81,7 +82,7 @@ create table event_type (
 );
 
 create table booking (
-  id uuid primary key,
+  id uuid primary key default gen_random_uuid(),
   event_type_id uuid not null references event_type(id),
   user_id uuid not null references app_user(id),
   uid text not null unique,
@@ -92,7 +93,7 @@ create table booking (
 );
 
 create table attendee (
-  id uuid primary key,
+  id uuid primary key default gen_random_uuid(),
   booking_id uuid not null unique references booking(id) on delete cascade,
   email text not null,
   name text not null,
@@ -100,7 +101,7 @@ create table attendee (
 );
 
 create table payment (
-  id uuid primary key,
+  id uuid primary key default gen_random_uuid(),
   booking_id uuid not null unique references booking(id) on delete cascade,
   amount integer not null check (amount >= 0),
   currency text not null,
@@ -108,7 +109,7 @@ create table payment (
 );
 
 create table credential (
-  id uuid primary key,
+  id uuid primary key default gen_random_uuid(),
   user_id uuid not null references app_user(id),
   type text not null,
   app_id text not null,
@@ -131,6 +132,22 @@ create policy "users can view their own account"
   on app_user for select
   using (id = auth.uid());
 
+create or replace function public.is_admin()
+returns boolean
+language sql
+stable
+security definer
+set search_path = public
+as $$
+  select exists (
+    select 1 from public.app_user
+    where id = auth.uid()
+      and id = '18ea6f79-8e4e-47a2-9f8b-8e0373890f1b'::uuid
+      and lower(email) = lower('Lanzuela63@gmail.com')
+      and role = 'admin'
+  );
+$$;
+
 create policy "users can manage their account settings"
   on account_settings for all
   using (user_id = auth.uid())
@@ -143,8 +160,8 @@ create policy "users can manage availability for their schedules"
 
 create policy "users can manage their own event types"
   on event_type for all
-  using (user_id = auth.uid())
-  with check (user_id = auth.uid());
+  using (user_id = auth.uid() or public.is_admin())
+  with check (user_id = auth.uid() or public.is_admin());
 
 create policy "users can manage their own bookings"
   on booking for all
