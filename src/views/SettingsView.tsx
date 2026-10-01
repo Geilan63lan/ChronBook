@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import type { User } from '@supabase/supabase-js'
-import { ExternalLink, Save } from 'lucide-react'
+import { Check, ExternalLink, Save } from 'lucide-react'
 import { supabase } from '../lib/supabase'
 
 const timeZones = ['UTC', 'America/Los_Angeles', 'America/Denver', 'America/Chicago', 'America/New_York', 'Europe/London', 'Europe/Paris', 'Asia/Manila', 'Asia/Tokyo', 'Australia/Sydney']
@@ -30,7 +30,7 @@ export function SettingsView({ user, initialDisplayName, initialBookingSlug, onD
       } else if (error) setMessage(error.message)
       setLoading(false)
     })
-  }, [user.id, onBookingSlugChange])
+  }, [user.id])
 
   const save = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()

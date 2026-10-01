@@ -123,7 +123,7 @@ function App() {
     }
     let isCurrent = true
     setAdminRoleLoaded(false)
-    Promise.resolve(client.rpc('is_admin')).then(({ data, error }) => {
+    client.rpc('is_admin').then(({ data, error }) => {
       if (!isCurrent) return
       setIsAdmin(!error && data === true)
       setAdminSetupNeeded(Boolean(error) || data !== true)
