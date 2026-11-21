@@ -5,6 +5,7 @@ import { isSupabaseConfigured, supabase } from './lib/supabase'
 import { SettingsView } from './views/SettingsView'
 import { AvailabilityView } from './views/AvailabilityView'
 import { EventTypesView } from './views/EventTypesView'
+import { HotelBookingsView } from './views/HotelBookingsView'
 import './views/workspace.css'
 import {
   ArrowUpRight,
@@ -15,11 +16,10 @@ import {
   Check,
   ChevronDown,
   Clock3,
-  Copy,
+  DoorOpen,
   Eye,
   EyeOff,
   LayoutDashboard,
-  Link2,
   LockKeyhole,
   LogOut,
   Menu,
@@ -29,38 +29,16 @@ import {
   Settings2,
   Sparkles,
   Users,
-  X,
 } from 'lucide-react'
-
-type BookingStatus = 'Confirmed' | 'Pending' | 'Completed'
-
-type Booking = {
-  time: string
-  period: string
-  title: string
-  attendee: string
-  email: string
-  status: BookingStatus
-  color: string
-}
 
 type EditableEvent = { id?: string; name: string; duration: string; bookings: number; accent: string }
 type TopPanel = 'search' | 'notifications' | null
 
 const eventAccents = ['coral', 'blue', 'mint', 'gold']
 const eventAccent = (id: string) => eventAccents[[...id].reduce((sum, char) => sum + char.charCodeAt(0), 0) % eventAccents.length]
-
-const bookings: Booking[] = [
-  { time: '09:30', period: 'AM', title: 'Product strategy call', attendee: 'Maya Chen', email: 'maya.chen@northstar.co', status: 'Confirmed', color: 'blue' },
-  { time: '11:00', period: 'AM', title: 'Onboarding session', attendee: 'Luca Moretti', email: 'luca@studioframe.it', status: 'Pending', color: 'mint' },
-  { time: '01:30', period: 'PM', title: 'Quarterly review', attendee: 'Ava Johnson', email: 'ava.j@commonthread.io', status: 'Confirmed', color: 'coral' },
-  { time: '03:00', period: 'PM', title: 'Design critique', attendee: 'Theo Williams', email: 'theo@northstar.co', status: 'Completed', color: 'gold' },
-]
-
-const initialEventTypes: EditableEvent[] = [
-  { name: '30 min discovery call', duration: '30 min', bookings: 18, accent: 'coral' },
-  { name: 'Product strategy call', duration: '60 min', bookings: 9, accent: 'blue' },
-  { name: 'Onboarding session', duration: '45 min', bookings: 12, accent: 'mint' },
+const hotelResourceCodes = [
+  ...Array.from({ length: 2 }, (_, floor) => Array.from({ length: 5 }, (_, room) => `${floor + 1}Rm${room + 1}`)).flat(),
+  '1EH1', '2EH1',
 ]
 
 function App() {
@@ -84,16 +62,14 @@ function App() {
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null)
   const [avatarBusy, setAvatarBusy] = useState(false)
   const [avatarMessage, setAvatarMessage] = useState('')
-  const [statusFilter, setStatusFilter] = useState<'All' | BookingStatus>('All')
-  const [showModal, setShowModal] = useState(false)
-  const [copied, setCopied] = useState(false)
+  const [requestedResourceCode, setRequestedResourceCode] = useState<string | null>(null)
   const [adminMessage, setAdminMessage] = useState('')
-  const [editableEvents, setEditableEvents] = useState(initialEventTypes)
-  const [eventTypesLoading, setEventTypesLoading] = useState(false)
+  const [editableEvents, setEditableEvents] = useState<EditableEvent[]>([])
+  const [eventTypesLoading, setEventTypesLoading] = useState(true)
   const [eventTypesMessage, setEventTypesMessage] = useState('')
+  const [emailVerified, setEmailVerified] = useState(false)
+  const [verifyMessage, setVerifyMessage] = useState('')
 
-  const visibleBookings = statusFilter === 'All' ? bookings : bookings.filter((booking) => booking.status === statusFilter)
-  const bookingPageUrl = `${window.location.origin}/${bookingSlug || 'booking'}`
 
   useEffect(() => {
     if (!appRef.current) return
@@ -123,7 +99,7 @@ function App() {
     }
     let isCurrent = true
     setAdminRoleLoaded(false)
-    client.rpc('is_admin').then(({ data, error }) => {
+    Promise.resolve(client.rpc('is_admin')).then(({ data, error }) => {
       if (!isCurrent) return
       setIsAdmin(!error && data === true)
       setAdminSetupNeeded(Boolean(error) || data !== true)
@@ -197,11 +173,19 @@ function App() {
     return () => listener.subscription.unsubscribe()
   }, [])
 
-  const copyLink = async () => {
-    await navigator.clipboard?.writeText(bookingPageUrl)
-    setCopied(true)
-    window.setTimeout(() => setCopied(false), 1800)
-  }
+  useEffect(() => {
+    if (!currentUser) {
+      setEmailVerified(false)
+      return
+    }
+    // Check if email is confirmed
+    const isConfirmed = !!currentUser.email_confirmed_at
+    setEmailVerified(isConfirmed)
+    if (!isConfirmed) {
+      // Optionally, we can sign out the user or restrict access
+      // For now, we just set the state and handle it in the UI
+    }
+  }, [currentUser])
 
   const uploadAvatar = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.currentTarget.files?.[0]
@@ -215,6 +199,8 @@ function App() {
       setAvatarMessage('Profile pictures must be 2 MB or smaller.')
       return
     }
+
+    // Note: For production, consider adding server-side validation via Supabase Edge Functions to prevent malicious file uploads.
 
     setAvatarBusy(true)
     setAvatarMessage('')
@@ -264,8 +250,32 @@ function App() {
     setAdminMessage('Event types saved to Supabase.')
   }
 
+  const resendVerificationEmail = async () => {
+    if (!supabase || !currentUser?.email) return
+    try {
+      await supabase.auth.resend({ type: 'signup', email: currentUser.email })
+      setVerifyMessage('Verification email resent!')
+    } catch (error) {
+      setVerifyMessage('Failed to resend verification email.')
+    }
+  }
+
   if (authLoading) return <div className="auth-loading" aria-label="Loading ChronBook"><span className="brand-mark"><CalendarDays size={17} /></span></div>
   if (!currentUser) return <AuthLanding configured={isSupabaseConfigured} />
+  if (!emailVerified) {
+    return (
+      <div className="email-verification-required">
+        <div className="email-verification-content">
+          <h2>Email verification required</h2>
+          <p>Please check your email and click the verification link to continue.</p>
+          {verifyMessage && <p className="email-verification-message">{verifyMessage}</p>}
+          <button className="email-verification-resend" onClick={resendVerificationEmail}>
+            Resend verification email
+          </button>
+        </div>
+      </div>
+    )
+  }
 
   return (
     <div className="app-shell" ref={appRef}>
@@ -298,40 +308,30 @@ function App() {
           <div className="top-actions" ref={topActionsRef}>
             <button className="icon-button" aria-label="Search" aria-expanded={topPanel === 'search'} onClick={() => setTopPanel((panel) => panel === 'search' ? null : 'search')}><Search size={18} /></button>
             <button className="icon-button notification" aria-label="Notifications" aria-expanded={topPanel === 'notifications'} onClick={() => setTopPanel((panel) => panel === 'notifications' ? null : 'notifications')}><Bell size={18} /><span /></button>
-            {topPanel === 'search' && <div className="top-popover search-popover"><label><Search size={16} /><input autoFocus value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} placeholder="Search bookings and event types" /></label>{searchTerm.trim() ? <div className="top-popover-results">{bookings.filter((booking) => `${booking.title} ${booking.attendee} ${booking.email}`.toLowerCase().includes(searchTerm.toLowerCase())).map((booking) => <button key={booking.title} onClick={() => { setActiveView('Bookings'); setTopPanel(null) }}><span className={`event-dot ${booking.color}`} /><span><strong>{booking.title}</strong><small>{booking.attendee} · {booking.time} {booking.period}</small></span></button>)}{editableEvents.filter((event) => event.name.toLowerCase().includes(searchTerm.toLowerCase())).map((event) => <button key={event.id ?? event.name} onClick={() => { setActiveView('Event types'); setTopPanel(null) }}><span className={`event-dot ${event.accent}`} /><span><strong>{event.name}</strong><small>Event type · {event.duration}</small></span></button>)}{!bookings.some((booking) => `${booking.title} ${booking.attendee} ${booking.email}`.toLowerCase().includes(searchTerm.toLowerCase())) && !editableEvents.some((event) => event.name.toLowerCase().includes(searchTerm.toLowerCase())) && <p className="top-popover-empty">No matching bookings or event types.</p>}</div> : <p className="top-popover-empty">Search your bookings and event types.</p>}</div>}
-            {topPanel === 'notifications' && <div className="top-popover notification-popover"><p className="section-kicker">SCHEDULE UPDATES</p><strong>{bookings.filter((booking) => booking.status === 'Pending').length} pending requests</strong>{bookings.filter((booking) => booking.status === 'Pending').map((booking) => <button key={booking.title} onClick={() => { setActiveView('Bookings'); setTopPanel(null) }}><span className={`event-dot ${booking.color}`} /><span><strong>{booking.title}</strong><small>{booking.attendee} · needs confirmation</small></span></button>)}<button className="popover-footer-action" onClick={() => { setActiveView('Bookings'); setTopPanel(null) }}>Open bookings <ArrowUpRight size={14} /></button></div>}
+            {topPanel === 'search' && <div className="top-popover search-popover"><label><Search size={16} /><input autoFocus value={searchTerm} onChange={(event) => setSearchTerm(event.target.value)} placeholder="Search hotel spaces and event types" /></label>{searchTerm.trim() ? <div className="top-popover-results">{hotelResourceCodes.filter((code) => code.toLowerCase().includes(searchTerm.toLowerCase())).map((code) => <button key={code} onClick={() => { setRequestedResourceCode(code); setActiveView('Bookings'); setTopPanel(null) }}><span className="event-dot gold" /><span><strong>{code}</strong><small>{code.includes('EH') ? 'Event hall' : 'Guest room'}</small></span></button>)}{editableEvents.filter((event) => event.name.toLowerCase().includes(searchTerm.toLowerCase())).map((event) => <button key={event.id ?? event.name} onClick={() => { setActiveView('Event types'); setTopPanel(null) }}><span className={`event-dot ${event.accent}`} /><span><strong>{event.name}</strong><small>Event type · {event.duration}</small></span></button>)}{!hotelResourceCodes.some((code) => code.toLowerCase().includes(searchTerm.toLowerCase())) && !editableEvents.some((event) => event.name.toLowerCase().includes(searchTerm.toLowerCase())) && <p className="top-popover-empty">No matching rooms, halls, or event types.</p>}</div> : <p className="top-popover-empty">Search rooms, event halls, and event types.</p>}</div>}
+            {topPanel === 'notifications' && <div className="top-popover notification-popover"><p className="section-kicker">HOTEL RESERVATIONS</p><strong>Reservations are confirmed when the space is available.</strong><p className="top-popover-empty">Open Bookings to reserve a room or event hall.</p><button className="popover-footer-action" onClick={() => { setActiveView('Bookings'); setTopPanel(null) }}>Browse spaces <ArrowUpRight size={14} /></button></div>}
           </div>
         </header>
 
         {activeView === 'Overview' ? <>
-          <section className="page-heading reveal"><div><p className="eyebrow">Monday, September 21, 2026</p><h1>Make room for<br /><em>good work.</em></h1><p className="lede">Your day, arranged with intention.</p></div><div className="heading-actions"><span className="live-pulse"><i /> Live schedule</span><button className="primary-button" onClick={() => setShowModal(true)}><Plus size={17} /> New booking</button></div></section>
+          <section className="page-heading reveal"><div><p className="eyebrow">HOTEL BOOKING WORKSPACE</p><h1>Make room for<br /><em>good stays.</em></h1><p className="lede">Reserve guest rooms and event halls across both floors.</p></div><div className="heading-actions"><span className="live-pulse"><i /> Live inventory</span><button className="primary-button" onClick={() => setActiveView('Bookings')}><Plus size={17} /> New reservation</button></div></section>
 
-          <section className="stats-grid reveal" aria-label="Booking summary">
-            <StatCard label="Bookings this month" value="39" trend="+18.4%" detail="vs. last month" icon={<CalendarDays size={18} />} />
-            <StatCard label="Hours booked" value="28.5" trend="+12.1%" detail="vs. last month" icon={<Clock3 size={18} />} />
-            <StatCard label="Conversion rate" value="68%" trend="+4.6%" detail="from booking page" icon={<ArrowUpRight size={18} />} />
+          <section className="stats-grid reveal" aria-label="Hotel inventory">
+            <StatCard label="Guest rooms" value="10" trend="2 floors" detail="5 rooms per floor" icon={<DoorOpen size={18} />} />
+            <StatCard label="Event halls" value="2" trend="1 per floor" detail="Up to 100 guests" icon={<CalendarDays size={18} />} />
+            <StatCard label="Bookable spaces" value="12" trend="Rooms + halls" detail="Overlap protected" icon={<Check size={18} />} />
           </section>
 
-          <section className="content-grid reveal">
-            <div className="schedule-panel panel"><div className="panel-heading"><div><p className="section-kicker">Your day at a glance</p><h2>Today’s schedule</h2><p>September 21 · Pacific Time</p></div><button className="text-button" onClick={() => setActiveView('Bookings')}>Open calendar <ArrowUpRight size={15} /></button></div><div className="filter-row">{(['All', 'Confirmed', 'Pending', 'Completed'] as const).map((filter) => <button key={filter} className={`filter-chip ${statusFilter === filter ? 'selected' : ''}`} onClick={() => setStatusFilter(filter)}>{filter}</button>)}</div><div className="timeline-wrap"><span className="timeline-line" /> <div className="booking-list">{visibleBookings.map((booking) => <BookingRow key={`${booking.time}-${booking.title}`} booking={booking} />)}</div></div></div>
-            <aside className="right-column"><div className="share-panel panel"><div className="share-icon"><Link2 size={19} /></div><p className="eyebrow">Your booking page</p><h2>Let people book time with you.</h2><p className="muted">Share one link and let ChronBook handle the time zones, reminders, and details.</p><div className="share-link"><span>{bookingPageUrl}</span><button onClick={copyLink} aria-label="Copy booking page link">{copied ? <Check size={16} /> : <Copy size={16} />}</button></div><button className="outline-button" onClick={copyLink}>{copied ? 'Copied to clipboard' : 'Copy booking link'} <ArrowUpRight size={15} /></button></div><div className="event-panel panel"><div className="panel-heading"><div><h2>Event types</h2><p>What people can book</p></div><button className="icon-button" aria-label="Add event type" onClick={() => setActiveView('Event types')}><Plus size={17} /></button></div>{editableEvents.map((event) => <div className="event-row" key={event.id ?? event.name}><span className={`event-dot ${event.accent}`} /><div><strong>{event.name}</strong><span>{event.duration} · {event.bookings} bookings</span></div><ChevronDown size={15} className="event-chevron" /></div>)}</div></aside>
-          </section>
-        </> : activeView === 'Bookings' ? <BookingsView /> : activeView === 'Settings' ? <SettingsView user={currentUser} initialDisplayName={displayName} initialBookingSlug={bookingSlug} onDisplayNameChange={setDisplayName} onBookingSlugChange={setBookingSlug} adminSetupNeeded={adminSetupNeeded} /> : activeView === 'Availability' ? <AvailabilityView user={currentUser} /> : activeView === 'Event types' ? <EventTypesView user={currentUser} events={editableEvents} onEventsChange={setEditableEvents} loading={eventTypesLoading} message={eventTypesMessage} setMessage={setEventTypesMessage} /> : activeView === 'Admin' && isAdmin ? <AdminView events={editableEvents} setEvents={setEditableEvents} message={adminMessage} onSave={saveAdminEvents} signedInEmail={currentUser.email ?? ''} isAdmin={isAdmin} loading={eventTypesLoading} /> : <section className="placeholder-view"><div className="placeholder-icon"><Sparkles size={24} /></div><p className="eyebrow">ChronBook workspace</p><h1>{activeView}</h1><p className="lede">This workspace is ready for the next booking workflow.</p><button className="primary-button" onClick={() => setShowModal(true)}><Plus size={17} /> Create booking</button></section>}
+          <section className="hotel-home-inventory panel reveal"><div className="panel-heading"><div><p className="section-kicker">ON PROPERTY</p><h2>Choose your space</h2><p>Select a room or hall to start a reservation.</p></div><button className="text-button" onClick={() => { setRequestedResourceCode(null); setActiveView('Bookings') }}>All spaces <ArrowUpRight size={15} /></button></div><div className="hotel-home-resource-grid">{hotelResourceCodes.map((code) => <button className="hotel-home-resource" key={code} onClick={() => { setRequestedResourceCode(code); setActiveView('Bookings') }}><span className="event-dot gold" /><strong>{code}</strong><small>{code.includes('EH') ? 'Event hall' : 'Guest room'}</small><ArrowRight size={14} /></button>)}</div></section>
+        </> : activeView === 'Bookings' ? <HotelBookingsView user={currentUser} requestedResourceCode={requestedResourceCode} /> : activeView === 'Settings' ? <SettingsView user={currentUser} initialDisplayName={displayName} initialBookingSlug={bookingSlug} onDisplayNameChange={setDisplayName} onBookingSlugChange={setBookingSlug} adminSetupNeeded={adminSetupNeeded} /> : activeView === 'Availability' ? <AvailabilityView user={currentUser} /> : activeView === 'Event types' ? <EventTypesView user={currentUser} events={editableEvents} onEventsChange={setEditableEvents} loading={eventTypesLoading} message={eventTypesMessage} setMessage={setEventTypesMessage} /> : activeView === 'Admin' && isAdmin ? <AdminView events={editableEvents} setEvents={setEditableEvents} message={adminMessage} onSave={saveAdminEvents} signedInEmail={currentUser.email ?? ''} isAdmin={isAdmin} loading={eventTypesLoading} /> : <section className="placeholder-view"><div className="placeholder-icon"><Sparkles size={24} /></div><p className="eyebrow">ChronBook workspace</p><h1>{activeView}</h1><p className="lede">This workspace is ready for the next hotel workflow.</p><button className="primary-button" onClick={() => { setRequestedResourceCode(null); setActiveView('Bookings') }}><Plus size={17} /> New reservation</button></section>}
       </main>
 
-      {showModal && <div className="modal-backdrop" role="presentation" onMouseDown={() => setShowModal(false)}><section className="modal" role="dialog" aria-modal="true" aria-labelledby="modal-title" onMouseDown={(event) => event.stopPropagation()}><div className="modal-header"><div><p className="eyebrow">Quick action</p><h2 id="modal-title">Create a booking</h2></div><button className="icon-button" onClick={() => setShowModal(false)} aria-label="Close dialog"><X size={18} /></button></div><label>Event type<select defaultValue="Product strategy call"><option>Product strategy call</option><option>30 min discovery call</option><option>Onboarding session</option></select></label><label>Attendee email<input type="email" placeholder="name@company.com" /></label><div className="modal-actions"><button className="outline-button" onClick={() => setShowModal(false)}>Cancel</button><button className="primary-button" onClick={() => setShowModal(false)}><Check size={16} /> Save booking</button></div><p className="modal-footnote"><LockKeyhole size={13} /> Server-side validation and authorization will be required before persistence.</p></section></div>}
     </div>
   )
 }
 
 function UserAvatar({ url, fallback }: { url: string | null; fallback: string }) {
   return <span className="avatar small-avatar">{url ? <img src={url} alt="" /> : fallback.toUpperCase()}</span>
-}
-
-function BookingsView() {
-  const [filter, setFilter] = useState<'All' | BookingStatus>('All')
-  const visible = filter === 'All' ? bookings : bookings.filter((booking) => booking.status === filter)
-  return <section className="workspace-view reveal"><div className="workspace-view-heading"><div><p className="eyebrow">YOUR WORKSPACE</p><h1>Bookings</h1><p className="lede">Review requests and scheduled meetings.</p></div><span className="connection-pill"><i /> Demo data</span></div><section className="bookings-page panel"><div className="panel-heading"><div><h2>All bookings</h2><p>{visible.length} shown · Pacific Time</p></div><span className="bookings-count">{bookings.length} total</span></div><div className="filter-row">{(['All', 'Confirmed', 'Pending', 'Completed'] as const).map((status) => <button key={status} className={`filter-chip ${filter === status ? 'selected' : ''}`} onClick={() => setFilter(status)}>{status}</button>)}</div><div className="booking-list">{visible.map((booking) => <BookingRow key={`${booking.time}-${booking.title}`} booking={booking} />)}</div></section></section>
 }
 
 function AuthLanding({ configured }: { configured: boolean }) {
@@ -375,8 +375,8 @@ function AuthLanding({ configured }: { configured: boolean }) {
   return <main className="auth-screen" ref={landingRef}>
     <section className="auth-story">
       <div className="auth-brand auth-reveal"><span className="brand-mark"><CalendarDays size={18} /></span><span>chronbook</span><span className="brand-beta">SCHEDULING WORKSPACE</span></div>
-      <div className="auth-story-copy auth-reveal"><p className="auth-kicker"><span /> PERSONAL TIME, WELL KEPT</p><h1>Your calendar,<br /><em>back in rhythm.</em></h1><p>One considered space for your bookings, availability, and the people you meet.</p></div>
-      <div className="auth-agenda auth-reveal"><div className="agenda-top"><span>UP NEXT</span><span>MON · 21</span></div><div className="agenda-item"><time>09:30</time><i className="agenda-dot lime" /><div><strong>Product strategy</strong><span>Maya Chen · 60 min</span></div><ArrowRight size={15} /></div><div className="agenda-item"><time>11:00</time><i className="agenda-dot violet" /><div><strong>Onboarding</strong><span>Luca Moretti · 45 min</span></div><ArrowRight size={15} /></div><div className="agenda-foot"><span className="agenda-pulse" /> A little room between things.</div></div>
+      <div className="auth-story-copy auth-reveal"><p className="auth-kicker"><span /> A PLACE FOR EVERY OCCASION</p><h1>Your stay,<br /><em>well reserved.</em></h1><p>Book a comfortable room or bring everyone together in one of our event halls.</p></div>
+      <div className="auth-agenda auth-reveal"><div className="agenda-top"><span>ON PROPERTY</span><span>2 FLOORS</span></div><div className="agenda-item"><time>ROOM</time><i className="agenda-dot lime" /><div><strong>1Rm1 — 2Rm5</strong><span>Ten guest rooms · two floors</span></div><ArrowRight size={15} /></div><div className="agenda-item"><time>HALL</time><i className="agenda-dot violet" /><div><strong>1EH1 · 2EH1</strong><span>Event spaces · one per floor</span></div><ArrowRight size={15} /></div><div className="agenda-foot"><span className="agenda-pulse" /> Reservations checked against live availability.</div></div>
       <footer className="auth-footer auth-reveal"><span>CHRONBOOK</span><span>YOUR TIME, IN GOOD ORDER</span></footer>
     </section>
     <section className="auth-form-side">
@@ -411,10 +411,6 @@ function AdminView({ events, setEvents, message, onSave, signedInEmail, isAdmin,
 
 function StatCard({ label, value, trend, detail, icon }: { label: string; value: string; trend: string; detail: string; icon: ReactNode }) {
   return <div className="stat-card"><div className="stat-top"><span>{label}</span><span className="stat-icon">{icon}</span></div><div className="stat-value">{value}</div><div className="stat-detail"><span className="trend">{trend}</span><span>{detail}</span></div></div>
-}
-
-function BookingRow({ booking }: { booking: Booking }) {
-  return <div className="booking-row"><div className="booking-time"><strong>{booking.time}</strong><span>{booking.period}</span></div><span className={`booking-marker ${booking.color}`} /><div className="booking-details"><strong>{booking.title}</strong><span>{booking.attendee} <i>·</i> {booking.email}</span></div><span className={`status status-${booking.status.toLowerCase()}`}>{booking.status}</span></div>
 }
 
 export default App

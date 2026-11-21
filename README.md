@@ -33,6 +33,8 @@ If the base schema is already installed, run [docs/supabase-upgrade.sql](docs/su
 
 For profile photos, run [docs/supabase-profile-pictures.sql](docs/supabase-profile-pictures.sql) in the SQL Editor. It creates the `avatars` Storage bucket, owner-folder policies, `app_user.avatar_path`, and a restricted RPC for updating only the signed-in user's avatar path. Users can change their photo from the profile menu. Uploads accept JPG, PNG, or WebP up to 2 MB; image objects are publicly readable so the avatar can appear in the app.
 
+For hotel reservations, run [docs/hotel-bookings.sql](docs/hotel-bookings.sql) in the SQL Editor after the base schema/upgrades. It seeds rooms `1Rm1` through `2Rm5` and halls `1EH1`, `2EH1`, adds owner-scoped resource policies, and prevents overlapping active bookings at the database level. The Bookings page then supports room check-in/check-out dates, event hall time slots, guest details/counts, and a per-account reservation list. The migration must be applied before the reservation form can load inventory or save bookings. Reservations require an authenticated account.
+
 The **Settings** screen saves public name, booking slug, time zone, and booking-page visibility. **Availability** saves one weekly time interval per day. **Event types** supports creating, renaming, changing duration, and deleting the signed-in user's event types (or all event types for the designated admin under RLS).
 
 Locally, run `npm run dev` and open `http://127.0.0.1:5173/`. The sign-in screen is the app entry point. After signing in, choose **Admin** in the left panel to manage event types. Sign out from the profile menu or the **Sign out** row in the sidebar; signing out returns to the entry screen. The deployed Vercel app works the same way at its deployment URL.
@@ -43,7 +45,7 @@ You do not need to fill every value in `.env.example`. It is a template. For thi
 
 ## Project boundaries
 
-Bookings and dashboard metrics remain prototype data. Supabase authentication, Admin event types, and user profile photos use the configured Supabase project. Follow [SECURITY.md](SECURITY.md) before adding persistence for bookings or payments.
+Hotel room and hall reservations, Supabase authentication, Admin event types, and user profile photos use the configured Supabase project. Overview metrics remain sample data; the Bookings page shows saved hotel reservations. Payment processing and public unauthenticated guest checkout are not implemented yet.
 
 The root repository README contains the full 18-point security checklist. This project keeps that checklist as a release gate, not as a promise that the prototype has already completed every item.
 

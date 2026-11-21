@@ -1,10 +1,10 @@
 # ChronBook security baseline
 
-The dashboard is currently a frontend prototype. It must not be treated as an authorization boundary or as a persistence layer.
+ChronBook uses Supabase Auth and RLS for account-scoped settings, event types, and hotel reservations. Overview metrics remain sample data. The client UI is not an authorization boundary; database policies and constraints are authoritative.
 
 ## Required before connecting real data
 
-- Protect admin and dashboard routes on the server, with server-side permission checks on every mutation.
+- Protect privileged operations with database/server-side permission checks on every mutation. Admin authorization is enforced by Supabase's `is_admin()` function and RLS.
 - Use a managed authentication provider or Argon2id/bcrypt for passwords, verify email ownership, and store sessions in `httpOnly`, `secure`, `sameSite` cookies.
 - Enable Row Level Security on every Postgres table. Policies must scope users, teams, event types, bookings, credentials, and payments to the authenticated principal.
 - Use parameterized queries or an ORM. Validate and normalize every request on the server before writing or querying.
@@ -17,4 +17,4 @@ The dashboard is currently a frontend prototype. It must not be treated as an au
 
 ## Current prototype boundary
 
-The booking dialog and filters are local UI state only. The `Save booking` action intentionally does not persist data yet. The next backend slice should add authenticated API routes, request schemas, database migrations, RLS policies, and tests for cross-user access denial before wiring this UI to real records.
+Hotel reservations require an authenticated Supabase account and the `docs/hotel-bookings.sql` migration. PostgreSQL rejects overlapping active reservations for the same space. Payment collection, public unauthenticated guest checkout, cancellation/refund workflows, and live dashboard metrics are not implemented yet.
